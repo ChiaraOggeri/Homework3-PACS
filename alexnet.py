@@ -11,10 +11,24 @@ model_urls = {
     'alexnet': 'https://download.pytorch.org/models/alexnet-owt-4df8aa71.pth',
 }
 
+class ReverseLayerF(Function):
+    # Forwards identity
+    # Sends backward reversed gradients
+    @staticmethod
+    def forward(ctx, x, alpha):
+        ctx.alpha = alpha
+
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        output = grad_output.neg() * ctx.alpha
+
+        return output, None
 
 class AlexNet(nn.Module):
 
-    def __init__(self, num_classes: int = 1000) -> None:
+    def __init__(self, num_classes: int = 7) -> None:
         super(AlexNet, self).__init__()
         self.features = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
@@ -41,13 +55,36 @@ class AlexNet(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(4096, num_classes),
         )
+        self.classifierDomain = nn.Sequential(
+            nn.Dropout(),
+            nn.Linear(256 * 6 * 6, 4096),
+            nn.ReLU(inplace=True),
+            nn.Dropout(),
+            nn.Linear(4096, 4096),
+            nn.ReLU(inplace=True),
+            nn.Linear(4096, 2),
+        )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.features(x)
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.classifier(x)
-        return x
+    def forward(self, x: torch.Tensor, alpha=None') -> torch.Tensor:
+         features = self.features
+        # Flatten the features:
+        features = features.view(features.size(0), -1)
+        # If we pass alpha, we can assume we are training the discriminator
+        if alpha is not None:
+            # gradient reversal layer (backward gradients will be reversed)
+            reverse_feature = ReverseLayerF.apply(features, alpha)
+            discriminator_output = reverse_feature.forward(self, self.classifierDomain,alpha)
+            return discriminator_output
+        # If we don't pass alpha, we assume we are training with supervision
+        else:
+            # do something else
+            class_outputs = self.classifier
+            return class_outputs    
+        #x= self.features(x)
+        #x= self.avgpool(x)
+        #x = torch.flatten(x, 1)
+       # x=self.classifier
+        #return x
 
 
 def alexnet(pretrained: bool = False, progress: bool = True, **kwargs: Any) -> AlexNet:
@@ -61,5 +98,5 @@ def alexnet(pretrained: bool = False, progress: bool = True, **kwargs: Any) -> A
     if pretrained:
         state_dict = load_state_dict_from_url(model_urls['alexnet'],
                                               progress=progress)
-        model.load_state_dict(state_dict)
+        model.load_state_dict(state_dict, strict=False)
     return model
