@@ -65,29 +65,32 @@ class AlexNet(nn.Module):
             nn.Linear(4096, 2),
         )
 
-    def forward(self, x: torch.Tensor, alpha=None') -> torch.Tensor:
-         features = self.features
+    def forward(self, x: torch.Tensor, alpha=None) -> torch.Tensor:
+         features = self.features(x)
+         features= self.avgpool(features)
+        # features = torch.flatten(features, 1)
+        
         # Flatten the features:
         features = features.view(features.size(0), -1)
         # If we pass alpha, we can assume we are training the discriminator
         if alpha is not None:
             # gradient reversal layer (backward gradients will be reversed)
+            features=self.classifierDomain(features)
             reverse_feature = ReverseLayerF.apply(features, alpha)
-            discriminator_output = reverse_feature.forward(self, self.classifierDomain,alpha)
+            discriminator_output = reverse_feature
             return discriminator_output
         # If we don't pass alpha, we assume we are training with supervision
         else:
             # do something else
-            class_outputs = self.classifier
+            class_outputs = self.classifier(features)
             return class_outputs    
         #x= self.features(x)
-        #x= self.avgpool(x)
-        #x = torch.flatten(x, 1)
+        #
        # x=self.classifier
         #return x
 
 
-def alexnet(pretrained: bool = False, progress: bool = True, **kwargs: Any) -> AlexNet:
+def alexnet(pretrained: bool = True, progress: bool = True, **kwargs: Any) -> AlexNet:
     r"""AlexNet model architecture from the
     `"One weird trick..." <https://arxiv.org/abs/1404.5997>`_ paper.
     Args:
